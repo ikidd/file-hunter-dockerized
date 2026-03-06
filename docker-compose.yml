@@ -1,7 +1,6 @@
 services:
   filehunter:
-    build: .
-    image: file-hunter:latest
+    image: ${FILEHUNTER_IMAGE:-ghcr.io/ikidd/file-hunter-dockerized:latest}
     container_name: file-hunter
     restart: unless-stopped
     ports:

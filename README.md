@@ -1,6 +1,6 @@
-# File Hunter (Docker)
+# file-hunter-dockerized
 
-Docker setup for [File Hunter](https://github.com/zen-logic/file-hunter) — catalog, deduplicate, and consolidate your archive storage.
+Docker image and Compose setup for [File Hunter](https://github.com/zen-logic/file-hunter) (catalog, deduplicate, and consolidate archive storage).
 
 ## Quick start
 
@@ -9,69 +9,35 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Then open **http://localhost:8000** in your browser. On first launch, create your user account in the setup screen.
+Open **http://localhost:8000** and create your user on first launch.
 
-## Build
+## Image
+
+Pre-built image from this repo (see [LATEST_BUILD.md](LATEST_BUILD.md) for current upstream SHA and tags):
 
 ```bash
-docker compose build
-# or
-docker build -t file-hunter:latest .
+docker pull ghcr.io/ikidd/file-hunter-dockerized:latest
 ```
 
-## Run with Docker Compose
+Use `:latest` or a commit tag (e.g. `:a1b2c3d`) from [LATEST_BUILD.md](LATEST_BUILD.md) to pin upstream.
 
-- **Start:** `docker compose up -d`
-- **Stop:** `docker compose down`
-- **Logs:** `docker compose logs -f filehunter`
-
-Data is stored in the bind-mounted directory (default `./data`) and persists across restarts.
-
-## Configuration (.env)
+## Config
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FILEHUNTER_DATA` | `./data` | Host path for database and app data (bind mount). |
-| `FILEHUNTER_PORT` | `8000` | Host port to publish. |
-| `FILE_HUNTER_DEMO` | — | Set to `1` to seed demo data on first run. |
+| `FILEHUNTER_IMAGE` | `ghcr.io/ikidd/file-hunter-dockerized:latest` | Image to run. |
+| `FILEHUNTER_DATA` | `./data` | Host path for DB (bind mount). |
+| `FILEHUNTER_PORT` | `8000` | Host port. |
+| `FILE_HUNTER_DEMO` | — | Set to `1` to seed demo data. |
 
-## Run with Docker only
+## Triggering a build
 
-```bash
-docker run -d --name file-hunter -p 8000:8000 -v "$(pwd)/data:/data" file-hunter:latest
-```
+- **Automatic:** Push to `main` or wait for the daily schedule (00:00 UTC).
+- **Manual:** **Actions → Build and push image → Run workflow.**
 
-## Cataloging host directories
+After a successful run, [LATEST_BUILD.md](LATEST_BUILD.md) is updated with the upstream commit SHA and image links.
 
-To scan folders from your host inside the container, add a bind mount in `docker-compose.yml`:
+## More
 
-```yaml
-volumes:
-  - ${FILEHUNTER_DATA:-./data}:/data
-  - /media/drives:/locations:ro   # read-only mounts to catalog
-```
-
-Then in File Hunter add a location such as `/locations/backup-disk`.
-
-## Demo mode
-
-Set in your `.env`:
-
-```
-FILE_HUNTER_DEMO=1
-```
-
-Then run once; the database will be seeded on first start.
-
-## Requirements
-
-- Docker and Docker Compose
-- Image is based on `python:3.12-slim` and pulls File Hunter from GitHub at build time
-
-## CI/CD and GitHub
-
-A GitHub Actions workflow builds and pushes the image to GHCR on every push to `main` and **daily** (to pick up upstream [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) updates). See [GITHUB_SETUP.md](GITHUB_SETUP.md) to create the repo, push this code, and use the published image.
-
-## License
-
-File Hunter is MIT licensed by [Zen Logic Ltd](https://zenlogic.co.uk). This Docker packaging is provided as-is.
+- [GITHUB_SETUP.md](GITHUB_SETUP.md) — Repo setup and GHCR usage.
+- [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) — Upstream app.

@@ -13,12 +13,13 @@ on:
 env:
   REGISTRY: ghcr.io
   UPSTREAM_REPO: https://github.com/zen-logic/file-hunter.git
+  UPSTREAM_REPO_DISPLAY: zen-logic/file-hunter
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -28,16 +29,9 @@ jobs:
       - name: Get upstream ref
         id: upstream
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Daily/manual: fetch latest commit from upstream main
-            SHA=$(git ls-remote "$UPSTREAM_REPO" main | cut -f1)
-            echo "ref=${SHA}" >> $GITHUB_OUTPUT
-            echo "short_sha=${SHA:0:7}" >> $GITHUB_OUTPUT
-          else
-            # Push to main: use branch
-            echo "ref=main" >> $GITHUB_OUTPUT
-            echo "short_sha=main" >> $GITHUB_OUTPUT
-          fi
+          SHA=$(git ls-remote "$UPSTREAM_REPO" main | cut -f1)
+          echo "ref=${SHA}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -52,7 +46,6 @@ jobs:
       - name: Extract image name
         id: meta
         run: |
-          # GHCR requires lowercase image path
           IMG=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "image=${IMG}" >> $GITHUB_OUTPUT
 
@@ -71,3 +64,33 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.ref }}
+
+      - name: Update LATEST_BUILD and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          IMG="${{ steps.meta.outputs.image }}"
+          SHORT="${{ steps.upstream.outputs.short_sha }}"
+          FULL="${{ steps.upstream.outputs.ref }}"
+          COMMIT_URL="https://github.com/${{ env.UPSTREAM_REPO_DISPLAY }}/commit/${FULL}"
+          cat > LATEST_BUILD.md << EOF
+          # Latest build
+
+          | Field | Value |
+          |-------|-------|
+          | **Upstream commit** | [\`${SHORT}\`](${COMMIT_URL}) |
+          | **Full SHA** | \`${FULL}\` |
+          | **Image (latest)** | \`${IMG}:latest\` |
+          | **Image (pinned)** | \`${IMG}:${SHORT}\` |
+          | **Built** | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |
+
+          To trigger a new build from this repo: **Actions → Build and push image → Run workflow**.
+          EOF
+          git add LATEST_BUILD.md
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update LATEST_BUILD to upstream ${SHORT}"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
