@@ -1,0 +1,73 @@
+# Build and push File Hunter Docker image to GHCR.
+# Runs on push to main and daily to pick up upstream (zen-logic/file-hunter) updates.
+name: Build and push image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 00:00 UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  UPSTREAM_REPO: https://github.com/zen-logic/file-hunter.git
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get upstream ref
+        id: upstream
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Daily/manual: fetch latest commit from upstream main
+            SHA=$(git ls-remote "$UPSTREAM_REPO" main | cut -f1)
+            echo "ref=${SHA}" >> $GITHUB_OUTPUT
+            echo "short_sha=${SHA:0:7}" >> $GITHUB_OUTPUT
+          else
+            # Push to main: use branch
+            echo "ref=main" >> $GITHUB_OUTPUT
+            echo "short_sha=main" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image name
+        id: meta
+        run: |
+          # GHCR requires lowercase image path
+          IMG=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=${IMG}" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.upstream.outputs.short_sha }}
+          build-args: |
+            REF=${{ steps.upstream.outputs.ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.upstream.outputs.ref }}

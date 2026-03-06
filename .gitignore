@@ -1,0 +1,5 @@
+# Local data (bind mount directory)
+data/
+
+# Local env overrides (copy from .env.example)
+.env

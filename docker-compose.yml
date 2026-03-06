@@ -1,0 +1,12 @@
+services:
+  filehunter:
+    build: .
+    image: file-hunter:latest
+    container_name: file-hunter
+    restart: unless-stopped
+    ports:
+      - "${FILEHUNTER_PORT:-8000}:8000"
+    volumes:
+      - ${FILEHUNTER_DATA:-./data}:/data
+    environment:
+      - FILE_HUNTER_DEMO=${FILE_HUNTER_DEMO:-}
