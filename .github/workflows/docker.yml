@@ -10,6 +10,10 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: build-and-push
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   UPSTREAM_REPO: https://github.com/zen-logic/file-hunter.git
@@ -69,6 +73,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main && git rebase origin/main
           IMG="${{ steps.meta.outputs.image }}"
           SHORT="${{ steps.upstream.outputs.short_sha }}"
           FULL="${{ steps.upstream.outputs.ref }}"
