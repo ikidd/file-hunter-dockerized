@@ -7,5 +7,7 @@ services:
       - "${FILEHUNTER_PORT:-8000}:8000"
     volumes:
       - ${FILEHUNTER_DATA:-./data}:/data
+      # Host filesystem at /host (ro). Set FILEHUNTER_HOST_PATH=/ to enable; leave empty to mount /tmp only.
+      - ${FILEHUNTER_HOST_PATH:-/tmp}:/host:ro
     environment:
       - FILE_HUNTER_DEMO=${FILE_HUNTER_DEMO:-}

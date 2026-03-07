@@ -28,7 +28,11 @@ Use `:latest` or a commit tag (e.g. `:a1b2c3d`) from [LATEST_BUILD.md](LATEST_BU
 | `FILEHUNTER_IMAGE` | `ghcr.io/ikidd/file-hunter-dockerized:latest` | Image to run. |
 | `FILEHUNTER_DATA` | `./data` | Host path for DB (bind mount). |
 | `FILEHUNTER_PORT` | `8000` | Host port. |
+| `FILEHUNTER_MOUNT_HOST` | `1` | Enable full host access when set (see below). |
+| `FILEHUNTER_HOST_PATH` | `/` | Host path mounted read-only at `/host` in the container. Set to `/` for full host; leave empty to disable (only `/tmp` at `/host`). |
 | `FILE_HUNTER_DEMO` | — | Set to `1` to seed demo data. |
+
+With host access enabled (default), add locations in File Hunter under **/host** (e.g. `/host/home`, `/host/media`) to catalog the host filesystem.
 
 ## Triggering a build
 
