@@ -6,6 +6,6 @@
 | **Full SHA** | `540023e23b8cbcfcc828188ba0eeb2f21df28f8c` |
 | **Image (latest)** | `ghcr.io/ikidd/file-hunter-dockerized:latest` |
 | **Image (pinned)** | `ghcr.io/ikidd/file-hunter-dockerized:540023e` |
-| **Built** | 2026-03-12T00:11:06Z |
+| **Built** | 2026-03-13T00:11:40Z |
 
 To trigger a new build from this repo: **Actions → Build and push image → Run workflow**.
