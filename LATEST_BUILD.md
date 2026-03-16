@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Upstream commit** | [`d3d6f6f`](https://github.com/zen-logic/file-hunter/commit/d3d6f6f5cced18669ec4d4ef7c373317f3d7c229) |
-| **Full SHA** | `d3d6f6f5cced18669ec4d4ef7c373317f3d7c229` |
+| **Upstream commit** | [`a378e7c`](https://github.com/zen-logic/file-hunter/commit/a378e7c2f01486bfd236fa8905c9f18a1269de82) |
+| **Full SHA** | `a378e7c2f01486bfd236fa8905c9f18a1269de82` |
 | **Image (latest)** | `ghcr.io/ikidd/file-hunter-dockerized:latest` |
-| **Image (pinned)** | `ghcr.io/ikidd/file-hunter-dockerized:d3d6f6f` |
-| **Built** | 2026-03-15T00:14:07Z |
+| **Image (pinned)** | `ghcr.io/ikidd/file-hunter-dockerized:a378e7c` |
+| **Built** | 2026-03-16T00:15:27Z |
 
 To trigger a new build from this repo: **Actions → Build and push image → Run workflow**.
