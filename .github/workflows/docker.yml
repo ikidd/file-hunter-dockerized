@@ -1,17 +1,15 @@
-# Build and push File Hunter image to GHCR when upstream (zen-logic/file-hunter) has new commits.
-# Pattern similar to https://github.com/ikidd/cursor-linux-release — daily check, build only when needed,
-# record Last Released On + Last Run on README.
+# Build and push File Hunter image to GHCR when upstream (zen-logic/file-hunter)
+# publishes a new GitHub release.
+# Pattern similar to ikidd/cursor-linux-release: daily check, build only when needed,
+# and update README status stamps.
 name: Build and push image
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "LATEST_BUILD.md"
-      - "README.md"
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [upstream_release]
 
 concurrency:
   group: build-and-push
@@ -33,38 +31,80 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get upstream ref
+      - name: Get upstream latest release and commit
         id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          PAYLOAD_SHA: ${{ github.event.client_payload.sha }}
+          PAYLOAD_URL: ${{ github.event.client_payload.release_url }}
+          PAYLOAD_PUBLISHED: ${{ github.event.client_payload.published_at }}
         run: |
-          SHA=$(git ls-remote "$UPSTREAM_REPO" main | cut -f1)
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ -n "${PAYLOAD_TAG}" ]; then
+            TAG="${PAYLOAD_TAG}"
+            URL="${PAYLOAD_URL:-https://github.com/${UPSTREAM_REPO_DISPLAY}/releases/tag/${TAG}}"
+            PUBLISHED_AT="${PAYLOAD_PUBLISHED:-}"
+            SHA="${PAYLOAD_SHA:-}"
+          else
+            RELEASE_JSON=$(gh api "repos/${UPSTREAM_REPO_DISPLAY}/releases/latest")
+            TAG=$(printf '%s' "$RELEASE_JSON" | jq -r '.tag_name')
+            URL=$(printf '%s' "$RELEASE_JSON" | jq -r '.html_url')
+            PUBLISHED_AT=$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // empty')
+            SHA=""
+          fi
+
+          if [ -z "$SHA" ]; then
+            SHA=$(git ls-remote "$UPSTREAM_REPO" "refs/tags/${TAG}^{}" | awk '{print $1}')
+            if [ -z "$SHA" ]; then
+              SHA=$(git ls-remote "$UPSTREAM_REPO" "refs/tags/${TAG}" | awk '{print $1}')
+            fi
+          fi
+          if [ -z "$SHA" ]; then
+            echo "Failed to resolve commit SHA for upstream release tag: ${TAG}"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "release_url=${URL}" >> $GITHUB_OUTPUT
+          echo "published_at=${PUBLISHED_AT}" >> $GITHUB_OUTPUT
           echo "ref=${SHA}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHA:0:7}" >> $GITHUB_OUTPUT
 
-      - name: Read last built upstream SHA
+      - name: Read last built upstream release and SHA
         id: last
         run: |
+          LAST_TAG=""
           LAST=""
           if [ -f LATEST_BUILD.md ]; then
+            LAST_TAG=$(grep '\*\*Upstream release\*\*' LATEST_BUILD.md | sed -n 's/.*`\([^`]*\)`.*/\1/p' | head -n1)
             LAST=$(grep '\*\*Full SHA\*\*' LATEST_BUILD.md | sed -n 's/.*`\([a-f0-9]\{40\}\)`.*/\1/p' | head -n1)
           fi
+          echo "tag=${LAST_TAG}" >> $GITHUB_OUTPUT
           echo "sha=${LAST}" >> $GITHUB_OUTPUT
 
       - name: Decide whether to build and push image
         id: gate
         env:
-          EVENT: ${{ github.event_name }}
+          CURRENT_TAG: ${{ steps.upstream.outputs.tag }}
           CURRENT: ${{ steps.upstream.outputs.ref }}
+          LAST_TAG: ${{ steps.last.outputs.tag }}
           LAST_BUILT: ${{ steps.last.outputs.sha }}
         run: |
           SHOULD=false
-          if [ "$EVENT" = "push" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+          # Build only when upstream publishes a new release.
+          if [ -n "$LAST_TAG" ] && [ "$CURRENT_TAG" != "$LAST_TAG" ]; then
             SHOULD=true
-            echo "reason=trigger:${EVENT}" >> $GITHUB_OUTPUT
+            echo "reason=upstream-release-tag-changed" >> $GITHUB_OUTPUT
+          elif [ -z "$LAST_TAG" ] && [ -z "$LAST_BUILT" ]; then
+            SHOULD=true
+            echo "reason=no-previous-build-record" >> $GITHUB_OUTPUT
           elif [ -z "$LAST_BUILT" ] || [ "$CURRENT" != "$LAST_BUILT" ]; then
             SHOULD=true
-            echo "reason=upstream-changed" >> $GITHUB_OUTPUT
+            echo "reason=upstream-release-commit-changed" >> $GITHUB_OUTPUT
           else
-            echo "reason=upstream-unchanged" >> $GITHUB_OUTPUT
+            echo "reason=upstream-release-unchanged" >> $GITHUB_OUTPUT
           fi
           echo "should_build=${SHOULD}" >> $GITHUB_OUTPUT
 
@@ -108,6 +148,9 @@ jobs:
         if: steps.gate.outputs.should_build == 'true'
         env:
           IMG: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          RELEASE_URL: ${{ steps.upstream.outputs.release_url }}
+          PUBLISHED_AT: ${{ steps.upstream.outputs.published_at }}
           SHORT: ${{ steps.upstream.outputs.short_sha }}
           FULL: ${{ steps.upstream.outputs.ref }}
           UPSTREAM_REPO_DISPLAY: ${{ env.UPSTREAM_REPO_DISPLAY }}
@@ -120,6 +163,8 @@ jobs:
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
+            echo "| **Upstream release** | [\`${TAG}\`](${RELEASE_URL}) |"
+            echo "| **Release published** | ${PUBLISHED_AT} |"
             echo "| **Upstream commit** | [\`${SHORT}\`](${COMMIT_URL}) |"
             echo "| **Full SHA** | \`${FULL}\` |"
             echo "| **Image (latest)** | \`${IMG}:latest\` |"
@@ -132,7 +177,10 @@ jobs:
       - name: Update README timestamps (like cursor-linux-release)
         env:
           SHOULD_BUILD: ${{ steps.gate.outputs.should_build }}
+          REASON: ${{ steps.gate.outputs.reason }}
           IMG: ${{ steps.meta.outputs.image }}
+          RELEASE_TAG: ${{ steps.upstream.outputs.tag }}
+          RELEASE_URL: ${{ steps.upstream.outputs.release_url }}
           SHORT: ${{ steps.upstream.outputs.short_sha }}
         run: |
           set -e
@@ -160,6 +208,8 @@ jobs:
             echo ""
             echo "- **⏳ Last Released On**: ${release_ts}"
             echo "- **🔄 Last Run**: ${current_ts}"
+            echo "- **🏷️ Upstream Latest Release**: [\`${RELEASE_TAG}\`](${RELEASE_URL})"
+            echo "- **🧭 Decision**: ${REASON}"
             if [ "$SHOULD_BUILD" = "true" ] && [ -n "$SHORT" ]; then
               echo "- **📦 Upstream in image**: \`${SHORT}\` (\`${IMG}:${SHORT}\`)"
             fi
