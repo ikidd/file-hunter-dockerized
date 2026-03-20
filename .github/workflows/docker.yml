@@ -1,12 +1,15 @@
-# Build and push File Hunter Docker image to GHCR.
-# Runs on push to main and daily to pick up upstream (zen-logic/file-hunter) updates.
+# Build and push File Hunter image to GHCR when upstream (zen-logic/file-hunter) has new commits.
+# Pattern similar to https://github.com/ikidd/cursor-linux-release — daily check, build only when needed,
+# record Last Released On + Last Run on README.
 name: Build and push image
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "LATEST_BUILD.md"
+      - "README.md"
   schedule:
-    # Daily at 00:00 UTC
     - cron: "0 0 * * *"
   workflow_dispatch:
 
@@ -37,10 +40,40 @@ jobs:
           echo "ref=${SHA}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHA:0:7}" >> $GITHUB_OUTPUT
 
+      - name: Read last built upstream SHA
+        id: last
+        run: |
+          LAST=""
+          if [ -f LATEST_BUILD.md ]; then
+            LAST=$(grep '\*\*Full SHA\*\*' LATEST_BUILD.md | sed -n 's/.*`\([a-f0-9]\{40\}\)`.*/\1/p' | head -n1)
+          fi
+          echo "sha=${LAST}" >> $GITHUB_OUTPUT
+
+      - name: Decide whether to build and push image
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          CURRENT: ${{ steps.upstream.outputs.ref }}
+          LAST_BUILT: ${{ steps.last.outputs.sha }}
+        run: |
+          SHOULD=false
+          if [ "$EVENT" = "push" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            SHOULD=true
+            echo "reason=trigger:${EVENT}" >> $GITHUB_OUTPUT
+          elif [ -z "$LAST_BUILT" ] || [ "$CURRENT" != "$LAST_BUILT" ]; then
+            SHOULD=true
+            echo "reason=upstream-changed" >> $GITHUB_OUTPUT
+          else
+            echo "reason=upstream-unchanged" >> $GITHUB_OUTPUT
+          fi
+          echo "should_build=${SHOULD}" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
+        if: steps.gate.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
+        if: steps.gate.outputs.should_build == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -48,12 +81,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract image name
+        if: steps.gate.outputs.should_build == 'true'
         id: meta
         run: |
           IMG=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "image=${IMG}" >> $GITHUB_OUTPUT
 
       - name: Build and push
+        if: steps.gate.outputs.should_build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -69,33 +104,90 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.ref }}
 
-      - name: Update LATEST_BUILD and push
+      - name: Write LATEST_BUILD.md
+        if: steps.gate.outputs.should_build == 'true'
+        env:
+          IMG: ${{ steps.meta.outputs.image }}
+          SHORT: ${{ steps.upstream.outputs.short_sha }}
+          FULL: ${{ steps.upstream.outputs.ref }}
+          UPSTREAM_REPO_DISPLAY: ${{ env.UPSTREAM_REPO_DISPLAY }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main && git rebase origin/main
-          IMG="${{ steps.meta.outputs.image }}"
-          SHORT="${{ steps.upstream.outputs.short_sha }}"
-          FULL="${{ steps.upstream.outputs.ref }}"
-          COMMIT_URL="https://github.com/${{ env.UPSTREAM_REPO_DISPLAY }}/commit/${FULL}"
-          cat > LATEST_BUILD.md << EOF
-          # Latest build
+          set -e
+          COMMIT_URL="https://github.com/${UPSTREAM_REPO_DISPLAY}/commit/${FULL}"
+          BUILT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          {
+            echo "# Latest build"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Upstream commit** | [\`${SHORT}\`](${COMMIT_URL}) |"
+            echo "| **Full SHA** | \`${FULL}\` |"
+            echo "| **Image (latest)** | \`${IMG}:latest\` |"
+            echo "| **Image (pinned)** | \`${IMG}:${SHORT}\` |"
+            echo "| **Built** | ${BUILT} |"
+            echo ""
+            echo "To trigger a new build from this repo: **Actions → Build and push image → Run workflow**."
+          } > LATEST_BUILD.md
 
-          | Field | Value |
-          |-------|-------|
-          | **Upstream commit** | [\`${SHORT}\`](${COMMIT_URL}) |
-          | **Full SHA** | \`${FULL}\` |
-          | **Image (latest)** | \`${IMG}:latest\` |
-          | **Image (pinned)** | \`${IMG}:${SHORT}\` |
-          | **Built** | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |
+      - name: Update README timestamps (like cursor-linux-release)
+        env:
+          SHOULD_BUILD: ${{ steps.gate.outputs.should_build }}
+          IMG: ${{ steps.meta.outputs.image }}
+          SHORT: ${{ steps.upstream.outputs.short_sha }}
+        run: |
+          set -e
+          current_ts=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
-          To trigger a new build from this repo: **Actions → Build and push image → Run workflow**.
-          EOF
-          git add LATEST_BUILD.md
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: update LATEST_BUILD to upstream ${SHORT}"
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+          if [ "$SHOULD_BUILD" = "true" ]; then
+            release_ts="$current_ts"
+          else
+            release_ts=$(grep -oP '(?<=\*\*⏳ Last Released On\*\*: ).*' README.md 2>/dev/null | head -n1 || true)
+            if [ -z "$release_ts" ]; then
+              release_ts="—"
+            fi
           fi
+
+          awk '
+            /^## 📅 Build status$/ { skip=1; next }
+            skip && /^## / { skip=0; print; next }
+            skip { next }
+            { print }
+          ' README.md > README.tmp && mv README.tmp README.md
+
+          {
+            echo ""
+            echo "## 📅 Build status"
+            echo ""
+            echo "- **⏳ Last Released On**: ${release_ts}"
+            echo "- **🔄 Last Run**: ${current_ts}"
+            if [ "$SHOULD_BUILD" = "true" ] && [ -n "$SHORT" ]; then
+              echo "- **📦 Upstream in image**: \`${SHORT}\` (\`${IMG}:${SHORT}\`)"
+            fi
+          } >> README.md
+
+      - name: Commit and push documentation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SHOULD_BUILD: ${{ steps.gate.outputs.should_build }}
+          UPSTREAM_SHORT: ${{ steps.upstream.outputs.short_sha }}
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
+          git rebase origin/main
+          git add README.md
+          if [ -f LATEST_BUILD.md ]; then
+            git add LATEST_BUILD.md
+          fi
+          if git diff --staged --quiet; then
+            echo "Nothing to commit."
+          else
+            msg="docs: update build status [workflow]"
+            if [ "$SHOULD_BUILD" = "true" ]; then
+              msg="chore: image for upstream ${UPSTREAM_SHORT} + README status [workflow]"
+            fi
+            git commit -m "$msg"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+          fi

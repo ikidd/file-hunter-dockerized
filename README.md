@@ -36,12 +36,17 @@ With host access enabled (default), add locations in File Hunter under **/host**
 
 ## Triggering a build
 
-- **Automatic:** Push to `main` or wait for the daily schedule (00:00 UTC).
-- **Manual:** **Actions → Build and push image → Run workflow.**
+- **Scheduled:** Daily at 00:00 UTC the workflow checks [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) `main`. A new image is built and pushed **only when upstream has a new commit** (same idea as [cursor-linux-release](https://github.com/ikidd/cursor-linux-release), which skips work when there is nothing new).
+- **Push to `main`:** Pushes that change this repo (except README-only / LATEST_BUILD-only bot updates) trigger a full build.
+- **Manual:** **Actions → Build and push image → Run workflow** forces a build.
 
-After a successful run, [LATEST_BUILD.md](LATEST_BUILD.md) is updated with the upstream commit SHA and image links.
+When an image is published, [LATEST_BUILD.md](LATEST_BUILD.md) records the upstream SHA and tags. Timestamps below are updated every run.
+
+## 📅 Build status
+
+- **⏳ Last Released On**: —
+- **🔄 Last Run**: —
 
 ## More
 
-- [GITHUB_SETUP.md](GITHUB_SETUP.md) — Repo setup and GHCR usage.
 - [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) — Upstream app.
