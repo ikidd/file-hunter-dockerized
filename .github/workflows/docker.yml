@@ -176,7 +176,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
-          git rebase origin/main
+          # README/LATEST_BUILD were edited above; rebase requires a clean tree or --autostash
+          git rebase --autostash origin/main
           git add README.md
           if [ -f LATEST_BUILD.md ]; then
             git add LATEST_BUILD.md
