@@ -42,11 +42,12 @@ With host access enabled (default), add locations in File Hunter under **/host**
 
 When an image is published, [LATEST_BUILD.md](LATEST_BUILD.md) records the upstream SHA and tags. Timestamps below are updated every run.
 
-## 📅 Build status
-
-- **⏳ Last Released On**: —
-- **🔄 Last Run**: —
-
 ## More
 
 - [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) — Upstream app.
+
+## 📅 Build status
+
+- **⏳ Last Released On**: 2026-03-20 05:11:33 UTC
+- **🔄 Last Run**: 2026-03-20 05:11:33 UTC
+- **📦 Upstream in image**: `19b194a` (`ghcr.io/ikidd/file-hunter-dockerized:19b194a`)
