@@ -46,8 +46,10 @@ When an image is published, [LATEST_BUILD.md](LATEST_BUILD.md) records the upstr
 
 - [zen-logic/file-hunter](https://github.com/zen-logic/file-hunter) — Upstream app.
 
+
 ## 📅 Build status
 
 - **⏳ Last Released On**: 2026-03-20 05:11:33 UTC
-- **🔄 Last Run**: 2026-03-20 05:11:33 UTC
-- **📦 Upstream in image**: `19b194a` (`ghcr.io/ikidd/file-hunter-dockerized:19b194a`)
+- **🔄 Last Run**: 2026-03-21 00:11:42 UTC
+- **🏷️ Upstream Latest Release**: [`v1.2.6`](https://github.com/zen-logic/file-hunter/releases/tag/v1.2.6)
+- **🧭 Decision**: upstream-release-unchanged
