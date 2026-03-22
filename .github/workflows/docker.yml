@@ -170,8 +170,6 @@ jobs:
             echo "| **Image (latest)** | \`${IMG}:latest\` |"
             echo "| **Image (pinned)** | \`${IMG}:${SHORT}\` |"
             echo "| **Built** | ${BUILT} |"
-            echo ""
-            echo "To trigger a new build from this repo: **Actions → Build and push image → Run workflow**."
           } > LATEST_BUILD.md
 
       - name: Update README timestamps (like cursor-linux-release)
