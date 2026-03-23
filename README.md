@@ -19,7 +19,7 @@ Pre-built image from this repo (see [LATEST_BUILD.md](LATEST_BUILD.md) for curre
 docker pull ghcr.io/ikidd/file-hunter-dockerized:latest
 ```
 
-Use `:latest` or a commit tag (e.g. `:a1b2c3d`) from [LATEST_BUILD.md](LATEST_BUILD.md) to pin upstream.
+Use `:latest` or a version tag (e.g. `:1.2.12`) from [LATEST_BUILD.md](LATEST_BUILD.md) to pin upstream.
 
 ## Config
 

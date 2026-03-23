@@ -127,6 +127,15 @@ jobs:
           IMG=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "image=${IMG}" >> $GITHUB_OUTPUT
 
+      - name: Derive version from tag
+        if: steps.gate.outputs.should_build == 'true'
+        id: version
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Build and push
         if: steps.gate.outputs.should_build == 'true'
         uses: docker/build-push-action@v6
@@ -135,20 +144,22 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:latest
-            ${{ steps.meta.outputs.image }}:${{ steps.upstream.outputs.short_sha }}
+            ${{ steps.meta.outputs.image }}:${{ steps.version.outputs.version }}
           build-args: |
-            REF=${{ steps.upstream.outputs.ref }}
+            VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.ref }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
       - name: Write LATEST_BUILD.md
         if: steps.gate.outputs.should_build == 'true'
         env:
           IMG: ${{ steps.meta.outputs.image }}
           TAG: ${{ steps.upstream.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
           RELEASE_URL: ${{ steps.upstream.outputs.release_url }}
           PUBLISHED_AT: ${{ steps.upstream.outputs.published_at }}
           SHORT: ${{ steps.upstream.outputs.short_sha }}
@@ -168,7 +179,7 @@ jobs:
             echo "| **Upstream commit** | [\`${SHORT}\`](${COMMIT_URL}) |"
             echo "| **Full SHA** | \`${FULL}\` |"
             echo "| **Image (latest)** | \`${IMG}:latest\` |"
-            echo "| **Image (pinned)** | \`${IMG}:${SHORT}\` |"
+            echo "| **Image (pinned)** | \`${IMG}:${VERSION}\` |"
             echo "| **Built** | ${BUILT} |"
           } > LATEST_BUILD.md
 
@@ -179,7 +190,7 @@ jobs:
           IMG: ${{ steps.meta.outputs.image }}
           RELEASE_TAG: ${{ steps.upstream.outputs.tag }}
           RELEASE_URL: ${{ steps.upstream.outputs.release_url }}
-          SHORT: ${{ steps.upstream.outputs.short_sha }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -e
           current_ts=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -208,8 +219,8 @@ jobs:
             echo "- **🔄 Last Run**: ${current_ts}"
             echo "- **🏷️ Upstream Latest Release**: [\`${RELEASE_TAG}\`](${RELEASE_URL})"
             echo "- **🧭 Decision**: ${REASON}"
-            if [ "$SHOULD_BUILD" = "true" ] && [ -n "$SHORT" ]; then
-              echo "- **📦 Upstream in image**: \`${SHORT}\` (\`${IMG}:${SHORT}\`)"
+            if [ "$SHOULD_BUILD" = "true" ] && [ -n "$VERSION" ]; then
+              echo "- **📦 Upstream in image**: \`${VERSION}\` (\`${IMG}:${VERSION}\`)"
             fi
           } >> README.md
 
@@ -218,13 +229,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           SHOULD_BUILD: ${{ steps.gate.outputs.should_build }}
-          UPSTREAM_SHORT: ${{ steps.upstream.outputs.short_sha }}
+          UPSTREAM_TAG: ${{ steps.upstream.outputs.tag }}
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
-          # README/LATEST_BUILD were edited above; rebase requires a clean tree or --autostash
           git rebase --autostash origin/main
           git add README.md
           if [ -f LATEST_BUILD.md ]; then
@@ -235,7 +245,7 @@ jobs:
           else
             msg="docs: update build status [workflow]"
             if [ "$SHOULD_BUILD" = "true" ]; then
-              msg="chore: image for upstream ${UPSTREAM_SHORT} + README status [workflow]"
+              msg="chore: image for upstream ${UPSTREAM_TAG} + README status [workflow]"
             fi
             git commit -m "$msg"
             git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main

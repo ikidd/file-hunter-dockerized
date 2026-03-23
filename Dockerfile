@@ -3,34 +3,30 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Clone file-hunter (REF can be branch name, e.g. main, or full commit SHA)
-ARG REPO=https://github.com/zen-logic/file-hunter.git
-ARG REF=main
-RUN git init && git remote add origin "${REPO}" \
-    && git fetch --depth 1 origin "${REF}" && git checkout "${REF}" \
-    && rm -rf .git
+# Download and extract the release tarball (bundles server, agent, core, and static assets)
+ARG VERSION=1.2.12
+RUN curl -fSL "https://github.com/zen-logic/file-hunter/releases/download/v${VERSION}/filehunter-${VERSION}.tar.gz" \
+    -o /tmp/filehunter.tar.gz \
+    && tar xzf /tmp/filehunter.tar.gz --strip-components=1 -C /app \
+    && rm /tmp/filehunter.tar.gz
 
-# Install runtime deps only (exclude dev tools like ruff)
-RUN pip install --no-cache-dir \
-    starlette \
-    "uvicorn[standard]" \
-    aiosqlite \
-    xxhash \
-    python-multipart \
-    httpx
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Database and config will live in /data (mounted volume)
-RUN mkdir -p /data
+# The launcher expects a relative "data/" dir under /app.
+# Symlink it to /data so the DB and agent config live on the mounted volume.
+RUN mkdir -p /data && ln -s /data /app/data
 
-# Use config that stores DB in /data for persistence
+# Pre-create config that stores DB in data/ (-> /data via symlink);
+# the launcher handles agent_config.json during preflight.
 COPY config.json /app/config.json
+
+RUN chmod +x filehunter
 
 EXPOSE 8000
 
-# Bind to all interfaces so the app is reachable from outside the container
-CMD ["python", "-m", "file_hunter", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./filehunter"]

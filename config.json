@@ -1,5 +1,6 @@
 {
   "host": "0.0.0.0",
   "port": 8000,
-  "database": "/data/file_hunter.db"
+  "agent_port": 8001,
+  "database": "data/file_hunter.db"
 }
