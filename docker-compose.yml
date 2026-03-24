@@ -3,6 +3,9 @@ services:
     image: ${FILEHUNTER_IMAGE:-ghcr.io/ikidd/file-hunter-dockerized:latest}
     container_name: file-hunter
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "${FILEHUNTER_PORT:-8000}:8000"
     volumes:

@@ -1,5 +1,6 @@
 # Local data (bind mount directory)
 data/
+data-fresh/
 
 # Local env overrides (copy from .env.example)
 .env
