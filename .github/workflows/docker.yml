@@ -23,6 +23,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      image_pushed: ${{ steps.image_pushed_record.outputs.value }}
     permissions:
       contents: write
       packages: write
@@ -137,6 +139,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build and push
+        id: docker_push
         if: steps.gate.outputs.should_build == 'true'
         uses: docker/build-push-action@v6
         with:
@@ -249,4 +252,15 @@ jobs:
             fi
             git commit -m "$msg"
             git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+          fi
+
+      # Exposed for the separate "Tier A API smoke" workflow (workflow_run), which reads this via the Actions API.
+      - name: Record GHCR publish (for Tier A gate)
+        id: image_pushed_record
+        if: always()
+        run: |
+          if [ "${{ steps.gate.outputs.should_build }}" = "true" ] && [ "${{ steps.docker_push.outcome }}" = "success" ]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
           fi

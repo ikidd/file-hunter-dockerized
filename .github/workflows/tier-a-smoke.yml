@@ -1,0 +1,195 @@
+# Tier A: pull GHCR image and run API smoke tests (scripts/tier-a-smoke.sh).
+# - Runs automatically after "Build and push image" completes successfully *and* that run published to GHCR
+#   (reads the build job output image_pushed via the Actions API).
+# - Run manually: Actions → Tier A API smoke → Run workflow (optional image ref).
+name: Tier A API smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: "Full image ref to test (e.g. ghcr.io/org/repo:latest). Leave blank for this repo’s GHCR :latest."
+        required: false
+        type: string
+        default: ""
+  workflow_run:
+    workflows: ["Build and push image"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: tier-a-smoke
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  gate:
+    name: Decide whether to run Tier A
+    runs-on: ubuntu-latest
+    outputs:
+      run_smoke: ${{ steps.decide.outputs.run_smoke }}
+      image_ref: ${{ steps.decide.outputs.image_ref }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Resolve trigger
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          WFR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WFR_ID: ${{ github.event.workflow_run.id }}
+          WFR_URL: ${{ github.event.workflow_run.html_url }}
+          INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_ref || '' }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DEFAULT_IMG="$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]'):latest"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            IMG="$(printf '%s' "${INPUT_IMAGE:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            if [ -z "$IMG" ]; then
+              IMG="$DEFAULT_IMG"
+            fi
+            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+            echo "image_ref=${IMG}" >> "$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Tier A gate"
+              echo ""
+              echo "**Trigger:** manual"
+              echo "**Image:** \`${IMG}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "image_ref=" >> "$GITHUB_OUTPUT"
+            echo "reason=unexpected-event:${EVENT_NAME}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "## Tier A gate"
+            echo ""
+            echo "**Trigger:** workflow_run from [build workflow](${WFR_URL})"
+            echo "**Build conclusion:** ${WFR_CONCLUSION}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WFR_CONCLUSION" != "success" ]; then
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "image_ref=" >> "$GITHUB_OUTPUT"
+            echo "reason=build-workflow-not-success" >> "$GITHUB_OUTPUT"
+            echo "**Action:** skip (build did not succeed)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          JOB_ID=$(gh api "repos/${REPO}/actions/runs/${WFR_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "build") | .id' | head -n1)
+          if [ -z "$JOB_ID" ]; then
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "image_ref=" >> "$GITHUB_OUTPUT"
+            echo "reason=no-build-job" >> "$GITHUB_OUTPUT"
+            echo "**Action:** skip (no job named \`build\` found)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          PUSHED=$(gh api "repos/${REPO}/actions/jobs/${JOB_ID}" \
+            --jq -r '.outputs.image_pushed.value // empty')
+          if [ "$PUSHED" != "true" ]; then
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "image_ref=" >> "$GITHUB_OUTPUT"
+            echo "reason=no-image-pushed" >> "$GITHUB_OUTPUT"
+            echo "**Action:** skip (no new image published this run)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${DEFAULT_IMG}" >> "$GITHUB_OUTPUT"
+          echo "reason=after-ghcr-publish" >> "$GITHUB_OUTPUT"
+          echo "**Action:** run smoke against \`${DEFAULT_IMG}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  tier_a_smoke:
+    name: Tier A API smoke
+    needs: gate
+    if: needs.gate.outputs.run_smoke == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        run: docker pull "${{ needs.gate.outputs.image_ref }}"
+
+      - name: Run Tier A checks
+        env:
+          IMAGE: ${{ needs.gate.outputs.image_ref }}
+        run: bash scripts/tier-a-smoke.sh "$IMAGE"
+
+  tier_a_notify:
+    name: Tier A email
+    needs: [gate, tier_a_smoke]
+    if: always() && needs.gate.outputs.run_smoke == 'true' && needs.tier_a_smoke.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "## Tier A smoke"
+            echo ""
+            echo "**Result:** ${{ needs.tier_a_smoke.result }}"
+            echo "**Gate:** ${{ needs.gate.outputs.reason }}"
+            echo ""
+            echo "This run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send result email (SMTP)
+        if: >-
+          ${{ secrets.TIER_A_MAIL_TO != '' && secrets.TIER_A_MAIL_FROM != '' &&
+          secrets.TIER_A_SMTP_SERVER != '' && secrets.TIER_A_SMTP_USER != '' &&
+          secrets.TIER_A_SMTP_PASSWORD != '' }}
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.TIER_A_SMTP_SERVER }}
+          server_port: ${{ secrets.TIER_A_SMTP_PORT != '' && secrets.TIER_A_SMTP_PORT || '465' }}
+          secure: true
+          username: ${{ secrets.TIER_A_SMTP_USER }}
+          password: ${{ secrets.TIER_A_SMTP_PASSWORD }}
+          subject: >-
+            [file-hunter-dockerized] Tier A ${{ needs.tier_a_smoke.result == 'success' && 'passed' || 'failed' }} (${{ github.ref_name }})
+          to: ${{ secrets.TIER_A_MAIL_TO }}
+          from: ${{ secrets.TIER_A_MAIL_FROM }}
+          body: |
+            Tier A API smoke finished with: ${{ needs.tier_a_smoke.result }}
+            Gate: ${{ needs.gate.outputs.reason }}
+
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Commit: ${{ github.sha }}
+            Ref: ${{ github.ref }}
+
+      - name: Email not sent (incomplete SMTP secrets)
+        if: >-
+          ${{ secrets.TIER_A_MAIL_TO != '' && (secrets.TIER_A_MAIL_FROM == '' || secrets.TIER_A_SMTP_SERVER == '' ||
+          secrets.TIER_A_SMTP_USER == '' || secrets.TIER_A_SMTP_PASSWORD == '') }}
+        run: |
+          echo "::notice::Tier A (${{ needs.tier_a_smoke.result }}): set TIER_A_MAIL_FROM, TIER_A_SMTP_SERVER, TIER_A_SMTP_PORT, TIER_A_SMTP_USER, TIER_A_SMTP_PASSWORD to enable email."
+
+      - name: No recipient configured
+        if: ${{ secrets.TIER_A_MAIL_TO == '' }}
+        run: |
+          echo "::notice::Tier A finished (${{ needs.tier_a_smoke.result }}). Set TIER_A_MAIL_TO and SMTP secrets for email, or use GitHub Settings → Notifications → Actions for default failure emails."
