@@ -157,8 +157,33 @@ jobs:
             echo "This run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # GitHub rejects `secrets` in step `if:`; branch on outputs from this step instead.
+      - name: Resolve SMTP flags
+        id: smtp_flags
+        env:
+          TIER_A_MAIL_TO: ${{ secrets.TIER_A_MAIL_TO }}
+          TIER_A_MAIL_FROM: ${{ secrets.TIER_A_MAIL_FROM }}
+          TIER_A_SMTP_SERVER: ${{ secrets.TIER_A_SMTP_SERVER }}
+          TIER_A_SMTP_USER: ${{ secrets.TIER_A_SMTP_USER }}
+          TIER_A_SMTP_PASSWORD: ${{ secrets.TIER_A_SMTP_PASSWORD }}
+        run: |
+          no_to=false
+          incomplete=false
+          send=false
+          if [ -z "${TIER_A_MAIL_TO}" ]; then
+            no_to=true
+          elif [ -z "${TIER_A_MAIL_FROM}" ] || [ -z "${TIER_A_SMTP_SERVER}" ] || \
+               [ -z "${TIER_A_SMTP_USER}" ] || [ -z "${TIER_A_SMTP_PASSWORD}" ]; then
+            incomplete=true
+          else
+            send=true
+          fi
+          echo "no_to=${no_to}" >> "$GITHUB_OUTPUT"
+          echo "incomplete=${incomplete}" >> "$GITHUB_OUTPUT"
+          echo "send=${send}" >> "$GITHUB_OUTPUT"
+
       - name: Send result email (SMTP)
-        if: ${{ secrets.TIER_A_MAIL_TO != '' && secrets.TIER_A_MAIL_FROM != '' && secrets.TIER_A_SMTP_SERVER != '' && secrets.TIER_A_SMTP_USER != '' && secrets.TIER_A_SMTP_PASSWORD != '' }}
+        if: steps.smtp_flags.outputs.send == 'true'
         continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
@@ -180,11 +205,11 @@ jobs:
             Ref: ${{ github.ref }}
 
       - name: Email not sent (incomplete SMTP secrets)
-        if: ${{ secrets.TIER_A_MAIL_TO != '' && (secrets.TIER_A_MAIL_FROM == '' || secrets.TIER_A_SMTP_SERVER == '' || secrets.TIER_A_SMTP_USER == '' || secrets.TIER_A_SMTP_PASSWORD == '') }}
+        if: steps.smtp_flags.outputs.incomplete == 'true'
         run: |
           echo "::notice::Tier A (${{ needs.tier_a_smoke.result }}): set TIER_A_MAIL_FROM, TIER_A_SMTP_SERVER, TIER_A_SMTP_PORT, TIER_A_SMTP_USER, TIER_A_SMTP_PASSWORD to enable email."
 
       - name: No recipient configured
-        if: ${{ secrets.TIER_A_MAIL_TO == '' }}
+        if: steps.smtp_flags.outputs.no_to == 'true'
         run: |
           echo "::notice::Tier A finished (${{ needs.tier_a_smoke.result }}). Set TIER_A_MAIL_TO and SMTP secrets for email, or use GitHub Settings → Notifications → Actions for default failure emails."
