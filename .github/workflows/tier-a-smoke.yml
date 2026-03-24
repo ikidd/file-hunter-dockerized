@@ -158,10 +158,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send result email (SMTP)
-        if: >-
-          ${{ secrets.TIER_A_MAIL_TO != '' && secrets.TIER_A_MAIL_FROM != '' &&
-          secrets.TIER_A_SMTP_SERVER != '' && secrets.TIER_A_SMTP_USER != '' &&
-          secrets.TIER_A_SMTP_PASSWORD != '' }}
+        if: ${{ secrets.TIER_A_MAIL_TO != '' && secrets.TIER_A_MAIL_FROM != '' && secrets.TIER_A_SMTP_SERVER != '' && secrets.TIER_A_SMTP_USER != '' && secrets.TIER_A_SMTP_PASSWORD != '' }}
         continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
@@ -183,9 +180,7 @@ jobs:
             Ref: ${{ github.ref }}
 
       - name: Email not sent (incomplete SMTP secrets)
-        if: >-
-          ${{ secrets.TIER_A_MAIL_TO != '' && (secrets.TIER_A_MAIL_FROM == '' || secrets.TIER_A_SMTP_SERVER == '' ||
-          secrets.TIER_A_SMTP_USER == '' || secrets.TIER_A_SMTP_PASSWORD == '') }}
+        if: ${{ secrets.TIER_A_MAIL_TO != '' && (secrets.TIER_A_MAIL_FROM == '' || secrets.TIER_A_SMTP_SERVER == '' || secrets.TIER_A_SMTP_USER == '' || secrets.TIER_A_SMTP_PASSWORD == '') }}
         run: |
           echo "::notice::Tier A (${{ needs.tier_a_smoke.result }}): set TIER_A_MAIL_FROM, TIER_A_SMTP_SERVER, TIER_A_SMTP_PORT, TIER_A_SMTP_USER, TIER_A_SMTP_PASSWORD to enable email."
 
