@@ -101,8 +101,7 @@ jobs:
             exit 0
           fi
 
-          PUSHED=$(gh api "repos/${REPO}/actions/jobs/${JOB_ID}" \
-            --jq -r '.outputs.image_pushed.value // empty')
+          PUSHED=$(gh api "repos/${REPO}/actions/jobs/${JOB_ID}" | jq -r '.outputs.image_pushed.value // empty')
           if [ "$PUSHED" != "true" ]; then
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
             echo "image_ref=" >> "$GITHUB_OUTPUT"
