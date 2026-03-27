@@ -1,6 +1,6 @@
 # Tier A: pull GHCR image and run API smoke tests (scripts/tier-a-smoke.sh).
 # - Runs automatically after "Build and push image" completes successfully *and* that run published to GHCR
-#   (reads the build job output image_pushed via the Actions API).
+#   (detected by checking the upstream build job step named "Build and push").
 # - Run manually: Actions → Tier A API smoke → Run workflow (optional image ref).
 name: Tier A API smoke
 
@@ -101,12 +101,12 @@ jobs:
             exit 0
           fi
 
-          PUSHED=$(gh api "repos/${REPO}/actions/jobs/${JOB_ID}" | jq -r '.outputs.image_pushed.value // empty')
-          if [ "$PUSHED" != "true" ]; then
+          BUILD_PUSH_STEP_CONCLUSION=$(gh api "repos/${REPO}/actions/jobs/${JOB_ID}" | jq -r '.steps[] | select(.name == "Build and push") | .conclusion // empty' | head -n1)
+          if [ "$BUILD_PUSH_STEP_CONCLUSION" != "success" ]; then
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
             echo "image_ref=" >> "$GITHUB_OUTPUT"
             echo "reason=no-image-pushed" >> "$GITHUB_OUTPUT"
-            echo "**Action:** skip (no new image published this run)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** skip (Build and push step conclusion: \`${BUILD_PUSH_STEP_CONCLUSION:-missing}\`)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
