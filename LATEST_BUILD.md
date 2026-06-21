@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Upstream release** | [`v1.3.0`](https://github.com/zen-logic/file-hunter/releases/tag/v1.3.0) |
-| **Release published** | 2026-06-20T18:37:11Z |
-| **Upstream commit** | [`99e61d6`](https://github.com/zen-logic/file-hunter/commit/99e61d69fa740b84d6bc73675a6d6a1639179230) |
-| **Full SHA** | `99e61d69fa740b84d6bc73675a6d6a1639179230` |
+| **Upstream release** | [`v1.3.2`](https://github.com/zen-logic/file-hunter/releases/tag/v1.3.2) |
+| **Release published** | 2026-06-21T10:53:40Z |
+| **Upstream commit** | [`8da2353`](https://github.com/zen-logic/file-hunter/commit/8da23537b1ae3859c889c212ec89037fc43fbf47) |
+| **Full SHA** | `8da23537b1ae3859c889c212ec89037fc43fbf47` |
 | **Image (latest)** | `ghcr.io/ikidd/file-hunter-dockerized:latest` |
-| **Image (pinned)** | `ghcr.io/ikidd/file-hunter-dockerized:1.3.0` |
-| **Built** | 2026-06-20T18:37:47Z |
+| **Image (pinned)** | `ghcr.io/ikidd/file-hunter-dockerized:1.3.2` |
+| **Built** | 2026-06-21T10:54:25Z |
