@@ -232,9 +232,10 @@ When an image is published, [LATEST_BUILD.md](LATEST_BUILD.md) records the upstr
 
 
 
+
 ## 📅 Build status
 
 - **⏳ Last Released On**: 2026-08-23 12:04:14 UTC
-- **🔄 Last Run**: 2026-08-28 08:00:57 UTC
+- **🔄 Last Run**: 2026-08-29 04:50:06 UTC
 - **🏷️ Upstream Latest Release**: [`v1.3.14`](https://github.com/zen-logic/file-hunter/releases/tag/v1.3.14)
 - **🧭 Decision**: upstream-release-unchanged
