@@ -281,10 +281,11 @@ When an image is published, [LATEST_BUILD.md](LATEST_BUILD.md) records the upstr
 
 
 
+
 ## 📅 Build status
 
-- **⏳ Last Released On**: 2026-09-29 03:21:06 UTC
-- **🔄 Last Run**: 2026-09-29 03:21:06 UTC
-- **🏷️ Upstream Latest Release**: [`v1.4.13`](https://github.com/zen-logic/file-hunter/releases/tag/v1.4.13)
+- **⏳ Last Released On**: 2026-09-29 15:46:58 UTC
+- **🔄 Last Run**: 2026-09-29 15:46:58 UTC
+- **🏷️ Upstream Latest Release**: [`v1.4.14`](https://github.com/zen-logic/file-hunter/releases/tag/v1.4.14)
 - **🧭 Decision**: upstream-release-tag-changed
-- **📦 Upstream in image**: `1.4.13` (`ghcr.io/ikidd/file-hunter-dockerized:1.4.13`)
+- **📦 Upstream in image**: `1.4.14` (`ghcr.io/ikidd/file-hunter-dockerized:1.4.14`)
